@@ -1,0 +1,23 @@
+{
+  "name": "lan-xiao-meng",
+  "version": "1.0.0",
+  "description": "蓝小梦 — 基于永劫无间角色「蓝梦」的 AI 女友 Agent，支持 CLI 聊天和微信扫码接入",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "chat": "node src/chat-cli.js",
+    "wechat": "node src/wechat-bridge.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "dotenv": "^16.4.7",
+    "openai": "^4.85.0"
+  },
+  "optionalDependencies": {
+    "weixin-agent-sdk": "^0.5.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

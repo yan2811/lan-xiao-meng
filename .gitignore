@@ -1,0 +1,9 @@
+.env
+node_modules/
+data/memory/
+*.token.json
+*.jpg
+*.png
+*.webp
+.DS_Store
+Thumbs.db
