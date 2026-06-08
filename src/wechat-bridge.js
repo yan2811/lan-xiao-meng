@@ -2,6 +2,7 @@ import "dotenv/config";
 import { handleMessage } from "./agent.js";
 import { getCharacterName, getUserNickname } from "./personality.js";
 import { generateProactiveMessage } from "./proactive.js";
+import { getFacts } from "./memory.js";
 
 // ============================================================
 //  蓝小梦 微信桥接（v2）
@@ -30,7 +31,9 @@ async function tryProactiveMessage() {
   if (elapsed < INACTIVE_MS) return;
 
   try {
-    const msg = generateProactiveMessage(lastUserMsg);
+    const userId = "wx-user";
+    const facts = getFacts(userId);
+    const msg = generateProactiveMessage(lastUserMsg, facts);
     await botInstance.sendMessage(msg);
     console.log(`[蓝小梦] 自动消息已发送: ${msg.slice(0, 40)}...`);
     resetActivityTimer();
@@ -74,11 +77,7 @@ async function startWechatBridge() {
       const userId = req.conversationId || "wx-user";
       const text = (req.text || "").trim();
 
-      // 收到用户消息 → 开启主动消息 + 重置计时器
-      if (!proactiveEnabled) {
-        proactiveEnabled = true;
-        console.log("[蓝小梦] 主动消息已开启（收到第一条用户消息）");
-      }
+      // 重置计时器（收到消息即更新活跃时间）
       resetActivityTimer();
       if (text) lastUserMsg = text;
 
@@ -89,7 +88,10 @@ async function startWechatBridge() {
 
       // 调试命令
       if (text === "/echo") return { text: "收到啦~ 蓝小梦在线中！" };
-      if (text === "/ping") return { text: "pong~ 活着呢，自动聊天功能已开启！" };
+      if (text === "/ping") {
+        const status = proactiveEnabled ? "开着呢~" : "关着呢，发 /wake 打开";
+        return { text: `pong~ 活着呢老板！自动聊天${status}` };
+      }
       if (text === "/sleep") {
         proactiveEnabled = false;
         return { text: "好嘞~ 那我先睡了，老板需要我的时候再叫我哦💤" };
@@ -97,7 +99,7 @@ async function startWechatBridge() {
       if (text === "/wake") {
         proactiveEnabled = true;
         resetActivityTimer();
-        return { text: "芜湖~ 睡醒了！老板我回来了！刚刚有没有想我~" };
+        return { text: "芜湖~ 睡醒了！自动聊天已开启，5 分钟不理我我就来找你~" };
       }
 
       // 核心回复
@@ -129,11 +131,11 @@ async function startWechatBridge() {
 
   console.log("");
   console.log(`✅ ${CHARACTER} 已接入微信！`);
-  console.log("   现在在微信 ClawBot 里跟她聊天吧~");
+  console.log("   在微信 ClawBot 里跟她聊天吧~");
   console.log("");
-  console.log("   💬 5分钟无对话会自动发消息找你");
-  console.log("   🌅 早晚时段有特别的问候语");
-  console.log("   /ping 检查在线  /sleep 关主动消息  /wake 开主动消息");
+  console.log("   💬 发 /wake 开启主动消息（5分钟无对话自动找你）");
+  console.log("   😴 发 /sleep 关闭主动消息");
+  console.log("   📡 /ping 检查在线  /echo 测试延迟");
   console.log("   Ctrl+C 停止");
   console.log("");
 

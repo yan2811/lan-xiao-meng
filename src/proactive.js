@@ -63,7 +63,7 @@ function getContextHint(lastUserMsg) {
   return short;
 }
 
-export function generateProactiveMessage(lastUserMsg) {
+export function generateProactiveMessage(lastUserMsg, facts) {
   const period = getHourPeriod();
   const pools = {
     morning: MORNING_MSGS,
@@ -71,6 +71,17 @@ export function generateProactiveMessage(lastUserMsg) {
     evening: EVENING_MSGS,
     night: NIGHT_MSGS,
   };
+
+  // 如果有事实记忆，10% 概率引用一条
+  if (facts && facts.length > 0 && Math.random() < 0.1) {
+    const fact = pickRandom(facts);
+    const refs = [
+      `对了老板，上次你说${fact.value}…我就是突然想起来了，随便问问~`,
+      `${fact.key}是${fact.value}——嘿嘿我还记得呢。老板你是不是觉得我记性特别好？`,
+      `刚刚翻了下小本本，看到你之前说过${fact.value}。老板你最近还这样吗？`,
+    ];
+    return pickRandom(refs);
+  }
 
   // 60% 时段消息 + 30% 随机想法 + 10% 上下文衔接
   const roll = Math.random();
