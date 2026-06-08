@@ -81,14 +81,16 @@ npm run chat
 ├── src/
 │   ├── index.js                # 入口
 │   ├── personality.js          # 人设注入（读取 profile → System Prompt）
-│   ├── agent.js                # 核心 Agent（对话处理 + 自动记忆）
-│   ├── memory.js               # 记忆系统（SQLite 存储）
-│   ├── ai-client.js            # DeepSeek API 客户端（OpenAI 兼容）
+│   ├── agent.js                # 核心 Agent（对话 + 三层记忆 + 搜索）
+│   ├── memory.js               # 三层记忆系统（JSON 存储）
+│   ├── ai-client.js            # DeepSeek API 客户端
+│   ├── search.js               # 联网搜索（DuckDuckGo 免费 API）
+│   ├── proactive.js            # 主动消息生成器
 │   ├── chat-cli.js             # CLI 聊天界面
-│   └── wechat-bridge.js        # 微信桥接（可选）
+│   ├── wechat-bridge.js        # 本地微信桥接（终端二维码）
+│   └── wechat-server.js        # 服务器版（网页二维码 + 24h 在线）
 └── data/
-    └── memory/                 # 对话记忆数据库
-        └── memory.db
+    └── memory/                 # 对话记忆存储
 ```
 
 ---
@@ -223,13 +225,14 @@ Agent 会自动：
 用户输入
    ↓
 agent.js（调度中心）
-   ├── memory.js        ← 读取历史消息 + 用户记忆
+   ├── memory.js        ← 三层记忆（L1缓冲 + L2摘要 + L3事实）
    ├── personality.js   ← 构建蓝梦 System Prompt
+   ├── search.js        ← 联网搜索（检测需要时自动触发）
    └── ai-client.js     ← 调用 DeepSeek API
    ↓
 蓝梦的回复
    ↓
-memory.js ← 保存对话 + 自动提取用户信息
+memory.js ← 保存对话 + 自动压缩摘要 + 提取事实
 ```
 
 ### 模型选择
@@ -258,7 +261,7 @@ A: 用 `deepseek-chat`（V3 模型）速度很快，日常聊天够用。`deepse
 
 ### Q: 记忆存在哪里？
 
-A: 在 `data/memory/memory.db`，SQLite 数据库。删除此文件即可清除所有记忆。
+A: 在 `data/memory/` 目录下的 JSON 文件中。删除此目录即可清除所有记忆。
 
 ### Q: 微信接入一直提示 "模块未找到"
 
@@ -277,7 +280,7 @@ A: 编辑 `config/lanmeng-profile.json` 调整人设。重点关注：
 ## 安全注意事项
 
 1. **API Key 不要泄露**：`.env` 文件不要提交到 Git，不要发到微信里
-2. **对话数据本地存储**：所有聊天记录在 `data/memory.db`，不会上传到任何第三方
+2. **对话数据本地存储**：所有聊天记录在 `data/memory/`，不会上传到任何第三方
 3. **微信风控**：微信桥接使用第三方工具（非微信官方），**建议用小号测试**，主号有封号风险
 4. **消息经腾讯服务器**：使用微信模式时消息会经过腾讯 iLink 服务器，不要发送密码、密钥等敏感信息
 5. **成本控制**：DeepSeek API 按 token 计费，价格非常便宜。日常闲聊聊一整天也就几分钱
@@ -317,8 +320,100 @@ A: 编辑 `config/lanmeng-profile.json` 调整人设。重点关注：
 | `openai` | OpenAI 兼容 SDK（DeepSeek 使用此格式） |
 | `dotenv` | 读取 .env 环境变量 |
 | `chalk` | CLI 彩色文字 |
-| `better-sqlite3` | 本地 SQLite 数据库（记忆存储） |
 | `weixin-agent-sdk` | 微信桥接（可选） |
+
+---
+
+## v2 新功能
+
+### 🧠 三层记忆系统
+
+| 层级 | 存储内容 | 容量 | 效果 |
+|------|---------|------|------|
+| L1 短期缓冲 | 最近 40 条完整对话 | 60 条 | 当前聊天不丢上下文 |
+| L2 对话摘要 | AI 自动压缩的对话摘要 | 10 条 | 隔天聊天也能接上 |
+| L3 用户事实 | 称呼、喜好、生日等 | 30 条 | "叫我宝贝"下次不会忘 |
+
+每 40 条消息自动触发一次摘要压缩，旧消息不丢——变成紧凑摘要存下来。事实提取每 20 条触发一次，节省 API 费用。
+
+### 🔍 联网搜索
+
+- 自动检测需要搜索的场景（新闻、梗、天气、比分、事实性问题等）
+- 使用 DuckDuckGo 免费 API，无需额外付费
+- 搜索结果自然融入回复，不说"根据搜索结果"
+- 缓存 1 小时，同话题不重复查
+
+### 💬 智能主动消息
+
+- 发 `/wake` 开启，发 `/sleep` 关闭
+- 5 分钟无对话自动发送
+- 消息按时段变化（早上/下午/晚上/深夜）
+- 40+ 条随机模板，不会重复
+- 有概率引用她记住的关于你的事实
+
+### 🌐 服务器网页扫码
+
+- `npm run server` 启动
+- 访问 `http://服务器IP:3721` 看二维码
+- 手机上打开链接直接扫码，无需 SSH 看终端
+- 支持 PM2 后台守护，24h 在线
+
+---
+
+## 服务器部署
+
+### 环境要求
+
+- Ubuntu 20.04+ / 24.04（推荐阿里云/腾讯云轻量服务器 2核2G）
+- Node.js 22+
+- 开放端口：3721（管理页面）
+
+### 部署步骤
+
+```bash
+# 1. SSH 连接服务器
+ssh root@你的服务器IP
+
+# 2. 安装 Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt install -y nodejs git
+
+# 3. 拉取项目
+git clone https://github.com/yan2811/lan-xiao-meng.git
+cd lan-xiao-meng
+
+# 4. 安装依赖
+npm install
+
+# 5. 配置 API Key
+cp .env.example .env
+nano .env  # 填入 DEEPSEEK_API_KEY
+
+# 6. 安装 PM2
+npm install -g pm2
+
+# 7. 启动（网页版）
+pm2 start npm --name "lan-xiao-meng" -- run server
+pm2 save
+pm2 startup  # 开机自启
+```
+
+### 扫码连接微信
+
+1. 阿里云控制台 → 安全组 → 开放 **3721** 端口
+2. 浏览器访问 `http://你的服务器IP:3721`
+3. 点击「开始连接微信」
+4. 手机微信扫描页面上的二维码
+5. 授权后自动连接，去微信里找蓝小梦聊天
+
+### PM2 常用命令
+
+```bash
+pm2 status          # 查看运行状态
+pm2 logs lan-xiao-meng  # 查看日志
+pm2 restart lan-xiao-meng  # 重启
+pm2 stop lan-xiao-meng     # 停止
+```
 
 ---
 
